@@ -171,4 +171,5 @@ require (
 	lukechampine.com/blake3 v1.3.0 // indirect
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
-replace github.com/sagernet/sing-tun => github.com/hwsaya/sing-tun v0.0.0-00010101000000-000000000000
+
+replace github.com/sagernet/sing-tun => github.com/hwsaya/sing-tun v0.0.0-20260512070320-97e9e189002f
