@@ -16,6 +16,7 @@ on:
           - All
           - Binary
           - Android
+          - Android-Binary
           - Apple
           - app-store
           - iOS
@@ -63,7 +64,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
   build:
     name: Build binary
-    if: github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Binary'
+    if: github.event_name != 'workflow_dispatch' || inputs.build == 'All' || inputs.build == 'Binary' || inputs.build == 'Android-Binary'
     runs-on: ubuntu-latest
     needs:
       - calculate_version
@@ -151,7 +152,7 @@ jobs:
           ndk-version: r28
           local-cache: true
       - name: Clone cronet-go
-        if: matrix.naive
+        if: matrix.naive && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           CRONET_GO_VERSION=$(cat .github/CRONET_GO_VERSION)
@@ -161,14 +162,14 @@ jobs:
           git -C ~/cronet-go checkout FETCH_HEAD
           git -C ~/cronet-go submodule update --init --recursive --depth=1
       - name: Regenerate Debian keyring
-        if: matrix.naive
+        if: matrix.naive && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           rm -f ~/cronet-go/naiveproxy/src/build/linux/sysroot_scripts/keyring.gpg
           cd ~/cronet-go
           GPG_TTY=/dev/null ./naiveproxy/src/build/linux/sysroot_scripts/generate_keyring.sh
       - name: Cache Chromium toolchain
-        if: matrix.naive
+        if: matrix.naive && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         id: cache-chromium-toolchain
         uses: actions/cache@v4
         with:
@@ -179,7 +180,7 @@ jobs:
             ~/cronet-go/naiveproxy/src/out/sysroot-build/
           key: chromium-toolchain-${{ matrix.arch }}-${{ matrix.variant }}-${{ hashFiles('.github/CRONET_GO_VERSION') }}
       - name: Download Chromium toolchain
-        if: matrix.naive
+        if: matrix.naive && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           cd ~/cronet-go
@@ -189,7 +190,7 @@ jobs:
             go run ./cmd/build-naive --target=linux/${{ matrix.arch }} download-toolchain
           fi
       - name: Set Chromium toolchain environment
-        if: matrix.naive
+        if: matrix.naive && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           cd ~/cronet-go
@@ -220,7 +221,7 @@ jobs:
         run: |
           echo "LDFLAGS_SHARED=$(cat release/LDFLAGS)" >> "${GITHUB_ENV}"
       - name: Build (purego)
-        if: matrix.variant == 'purego'
+        if: matrix.variant == 'purego' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           mkdir -p dist
@@ -237,12 +238,12 @@ jobs:
           GOMIPS64: ${{ matrix.gomips }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract libcronet.so
-        if: matrix.variant == 'purego' && matrix.naive
+        if: matrix.variant == 'purego' && matrix.naive && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           cd ~/cronet-go
           CGO_ENABLED=0 go run -v ./cmd/build-naive extract-lib --target ${{ matrix.os }}/${{ matrix.arch }} -o $GITHUB_WORKSPACE/dist
       - name: Build (glibc)
-        if: matrix.variant == 'glibc'
+        if: matrix.variant == 'glibc' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           mkdir -p dist
@@ -259,7 +260,7 @@ jobs:
           GOMIPS64: ${{ matrix.gomips }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build (musl)
-        if: matrix.variant == 'musl'
+        if: matrix.variant == 'musl' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           mkdir -p dist
@@ -276,7 +277,7 @@ jobs:
           GOMIPS64: ${{ matrix.gomips }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build (non-variant)
-        if: matrix.os != 'android' && matrix.variant == ''
+        if: matrix.os != 'android' && matrix.variant == '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           mkdir -p dist
@@ -309,6 +310,7 @@ jobs:
           BUILD_GOARCH: ${{ matrix.arch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Set name
+        if: matrix.os == 'android' || (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           DIR_NAME="sing-box-${{ needs.calculate_version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
           if [[ -n "${{ matrix.goarm }}" ]]; then
@@ -330,7 +332,7 @@ jobs:
           PKG_VERSION="${PKG_VERSION//-/\~}"
           echo "PKG_VERSION=${PKG_VERSION}" >> "${GITHUB_ENV}"
       - name: Package DEB
-        if: matrix.debian != ''
+        if: matrix.debian != '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           sudo gem install fpm
@@ -350,7 +352,7 @@ jobs:
           EOF
           debsigs --sign=origin -k ${{ secrets.GPG_KEY_ID }} --gpgopts '--pinentry-mode loopback --passphrase "${{ secrets.GPG_PASSPHRASE }}"' dist/*.deb
       - name: Package RPM
-        if: matrix.rpm != ''
+        if: matrix.rpm != '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           set -xeuo pipefail
           sudo gem install fpm
@@ -369,7 +371,7 @@ jobs:
           EOF
           rpmsign --addsign dist/*.rpm
       - name: Package Pacman
-        if: matrix.pacman != ''
+        if: matrix.pacman != '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           set -xeuo pipefail
           sudo gem install fpm
@@ -382,7 +384,7 @@ jobs:
             --architecture ${{ matrix.pacman }} \
             dist/sing-box=/usr/bin/sing-box
       - name: Package OpenWrt
-        if: matrix.openwrt != ''
+        if: matrix.openwrt != '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           set -xeuo pipefail
           sudo gem install fpm
@@ -397,11 +399,11 @@ jobs:
           done
           rm "dist/openwrt.deb"
       - name: Install apk-tools
-        if: matrix.openwrt != '' || matrix.alpine != ''
+        if: (matrix.openwrt != '' || matrix.alpine != '') && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           docker run --rm -v /usr/local/bin:/mnt alpine:edge sh -c "apk add --no-cache apk-tools-static && cp /sbin/apk.static /mnt/apk && chmod +x /mnt/apk"
       - name: Package OpenWrt APK
-        if: matrix.openwrt != ''
+        if: matrix.openwrt != '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           set -xeuo pipefail
           for architecture in ${{ matrix.openwrt }}; do
@@ -412,7 +414,7 @@ jobs:
               "dist/sing-box_${{ needs.calculate_version.outputs.version }}_openwrt_${architecture}.apk"
           done
       - name: Package Alpine APK
-        if: matrix.alpine != ''
+        if: matrix.alpine != '' && (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |-
           set -xeuo pipefail
           .github/build_alpine_apk.sh \
@@ -421,6 +423,7 @@ jobs:
             "dist/sing-box" \
             "dist/sing-box_${{ needs.calculate_version.outputs.version }}_linux_${{ matrix.alpine }}.apk"
       - name: Archive
+        if: matrix.os == 'android' || (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: |
           set -xeuo pipefail
           cd dist
@@ -438,8 +441,10 @@ jobs:
           fi
           rm -r "${DIR_NAME}"
       - name: Cleanup
+        if: matrix.os == 'android' || (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         run: rm -f dist/sing-box dist/libcronet.so
       - name: Upload artifact
+        if: matrix.os == 'android' || (github.event_name != 'workflow_dispatch' || inputs.build != 'Android-Binary')
         uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.os }}_${{ matrix.arch }}${{ matrix.goarm && format('v{0}', matrix.goarm) }}${{ matrix.go386 && format('_{0}', matrix.go386) }}${{ matrix.gomips && format('_{0}', matrix.gomips) }}${{ matrix.legacy_name && format('-legacy-{0}', matrix.legacy_name) }}${{ matrix.variant && format('-{0}', matrix.variant) }}
@@ -937,18 +942,18 @@ jobs:
         run: |-
           pushd clients/apple
           xcodebuild -exportArchive \
-          	-archivePath "${{ matrix.archive }}" \
-          	-exportOptionsPlist ${{ matrix.export }} \
-          	-exportPath "${{ matrix.export_path }}"
+                  -archivePath "${{ matrix.archive }}" \
+                  -exportOptionsPlist ${{ matrix.export }} \
+                  -exportPath "${{ matrix.export_path }}"
           brew install create-dmg
           create-dmg \
-          	--volname "sing-box" \
-          	--volicon "${{ matrix.export_path }}/SFM.app/Contents/Resources/AppIcon.icns" \
-          	--icon "SFM.app" 0 0 \
-          		--hide-extension "SFM.app" \
-          		--app-drop-link 0 0 \
-          		--skip-jenkins \
-          	SFM.dmg "${{ matrix.export_path }}/SFM.app"
+                  --volname "sing-box" \
+                  --volicon "${{ matrix.export_path }}/SFM.app/Contents/Resources/AppIcon.icns" \
+                  --icon "SFM.app" 0 0 \
+                          --hide-extension "SFM.app" \
+                          --app-drop-link 0 0 \
+                          --skip-jenkins \
+                  SFM.dmg "${{ matrix.export_path }}/SFM.app"
           xcrun notarytool submit "SFM.dmg" --wait --keychain-profile "notarytool-password"
           cd "${{ matrix.archive }}"
           zip -r SFM.dSYMs.zip dSYMs
@@ -965,7 +970,7 @@ jobs:
           path: 'dist'
   upload:
     name: Upload builds
-    if: "!failure() && github.event_name == 'workflow_dispatch' && (inputs.build == 'All' || inputs.build == 'Binary' || inputs.build == 'Android' || inputs.build == 'Apple' || inputs.build == 'macOS-standalone')"
+    if: "!failure() && github.event_name == 'workflow_dispatch' && (inputs.build == 'All' || inputs.build == 'Binary' || inputs.build == 'Android' || inputs.build == 'Android-Binary' || inputs.build == 'Apple' || inputs.build == 'macOS-standalone')"
     runs-on: ubuntu-latest
     needs:
       - calculate_version
