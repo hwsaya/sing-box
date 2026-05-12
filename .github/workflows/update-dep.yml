@@ -11,8 +11,12 @@ jobs:
         with:
           go-version-file: go.mod
       - run: |
-          go get github.com/hwsaya/sing-tun@97e9e189002f556742a1e53fbc972692b9ad9078
-          go mod tidy
+          COMMIT=97e9e189002f556742a1e53fbc972692b9ad9078
+          SHORT=${COMMIT:0:12}
+          DATE=$(curl -s "https://api.github.com/repos/hwsaya/sing-tun/commits/$COMMIT" | \
+            jq -r '.commit.committer.date | gsub("[-TZ:]";"") | .[0:14]')
+          go mod edit -replace "github.com/sagernet/sing-tun=github.com/hwsaya/sing-tun@v0.0.0-${DATE}-${SHORT}"
+          GONOSUMDB='github.com/hwsaya/*' go mod tidy
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "update sing-tun to custom fork"
